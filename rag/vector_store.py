@@ -43,8 +43,10 @@ class TFTVectorStore:
         
         # 임베딩 모델 로드
         print(f"임베딩 모델 로드 중: {embedding_model}")
-        self.embedding_model = SentenceTransformer(embedding_model)
-        print("임베딩 모델 로드 완료")
+        import config as cfg
+        device = getattr(cfg, 'EMBEDDING_DEVICE', 'cpu')
+        self.embedding_model = SentenceTransformer(embedding_model, device=device)
+        print(f"임베딩 모델 로드 완료 (device: {device})")
     
     def _embed_texts(self, texts: List[str]) -> List[List[float]]:
         """텍스트를 임베딩 벡터로 변환"""
@@ -72,9 +74,11 @@ class TFTVectorStore:
         
         # 메타데이터를 문자열로 변환 (ChromaDB 요구사항)
         for metadata in metadatas:
-            for key, value in metadata.items():
+            for key, value in list(metadata.items()):
                 if isinstance(value, list):
                     metadata[key] = json.dumps(value, ensure_ascii=False)
+                elif value is None:
+                    metadata[key] = ""
         
         # 임베딩 생성
         print(f"{len(texts)}개 청크 임베딩 생성 중...")

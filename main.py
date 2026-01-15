@@ -52,10 +52,10 @@ class TFTRAGSystem:
         # Generator는 API 키가 있을 때만 초기화
         try:
             self.generator = TFTGenerator()
-            print("✓ Claude API 연결 성공")
+            print("[OK] Gemini API 연결 성공")
         except ValueError:
             self.generator = None
-            print("⚠ Claude API 키 없음 (검색만 가능)")
+            print("[!] API 키 없음 (검색만 가능)")
         
         print("=== 초기화 완료 ===\n")
     
@@ -268,14 +268,25 @@ def main():
         
         # 메타데이터 로드
         if args.metadata_file:
-            with open(args.metadata_file, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
+            try:
+                with open(args.metadata_file, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            except FileNotFoundError:
+                print(f"경고: 메타데이터 파일 '{args.metadata_file}'을 찾을 수 없습니다.")
+                print("기본 메타데이터를 사용합니다.")
+                metadata = {
+                    'season': config.CURRENT_SEASON,
+                    'patch': config.CURRENT_PATCH,
+                    'video_source': args.video_url.split('=')[-1] if '=' in args.video_url else 'unknown',
+                    'composition_name': '미정',
+                    'difficulty': '초보'
+                }
         else:
             # 기본 메타데이터
             metadata = {
                 'season': config.CURRENT_SEASON,
                 'patch': config.CURRENT_PATCH,
-                'video_source': args.video_url.split('=')[-1],
+                'video_source': args.video_url.split('=')[-1] if '=' in args.video_url else 'unknown',
                 'composition_name': '미정',
                 'difficulty': '초보'
             }

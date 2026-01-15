@@ -6,6 +6,7 @@ load_dotenv()
 
 # API Keys
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
 # Project Paths
 BASE_DIR = Path(__file__).parent
@@ -23,6 +24,7 @@ RERANK_TOP_K = 3  # 재정렬 후 최종 선택 개수
 # Vector Store
 COLLECTION_NAME = "tft_strategies"
 EMBEDDING_MODEL = "sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens"  # 한국어 지원
+EMBEDDING_DEVICE = "cpu"  # "cuda" for GPU, "cpu" for CPU
 
 # Game Stages
 GAME_STAGES = [

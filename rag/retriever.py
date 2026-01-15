@@ -48,8 +48,6 @@ class TFTRetriever:
     
     def _extract_strategy_type(self, query: str) -> Optional[str]:
         """쿼리에서 전략 유형 추출"""
-        query_lower = query.lower()
-        
         if '리롤' in query or '돌림' in query or '돌려' in query:
             return '리롤'
         elif '레벨' in query:

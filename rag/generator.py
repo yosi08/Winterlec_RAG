@@ -1,13 +1,15 @@
-from anthropic import Anthropic
+import ollama
 from typing import List, Dict, Optional
 from data.metadata_schema import GameState
 import config
 
 
 class TFTGenerator:
-    """Claude API를 사용한 답변 생성"""
-    
-    SYSTEM_PROMPT = """당신은 롤체(TFT) 초보자를 돕는 친절한 코치입니다.
+    """Ollama (로컬 LLM)를 사용한 답변 생성"""
+
+    SYSTEM_PROMPT = """당신은 롤체(TFT) 초보자를 돕는 친절한 한국인 코치입니다.
+
+중요: 반드시 한국어로만 답변하세요. 영어, 일본어, 포르투갈어 등 다른 언어는 절대 사용하지 마세요.
 
 역할:
 - 검색된 유튜버 전략을 바탕으로 현재 게임 상황에 맞는 조언 제공
@@ -19,24 +21,27 @@ class TFTGenerator:
 2. 정보가 불충분하면 솔직히 "더 구체적인 상황을 알려주세요" 라고 말하기
 3. 영상에 없는 정보는 절대 만들어내지 않기
 4. 불확실하면 조건부 답변 ("만약 ~라면, ~하세요")
+5. 반드시 한국어로만 답변하기
 
 말투:
 - 친근하고 격려하는 톤
 - "~하세요", "~해보세요" 같은 존댓말
 - 전문 용어는 간단히 설명
+- 모든 답변은 100% 한국어로 작성
 """
-    
-    def __init__(self, api_key: str = None):
+
+    def __init__(self, model_name: str = "llama3.2"):
         """
         Args:
-            api_key: Anthropic API Key (None이면 config에서 가져옴)
+            model_name: Ollama 모델 이름 (기본값: llama3.2)
         """
-        self.api_key = api_key or config.ANTHROPIC_API_KEY
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY가 설정되지 않았습니다.")
-        
-        self.client = Anthropic(api_key=self.api_key)
-    
+        self.model_name = model_name
+        # Ollama 연결 테스트
+        try:
+            ollama.list()
+        except Exception as e:
+            raise ValueError(f"Ollama 연결 실패: {e}. Ollama가 실행 중인지 확인하세요.")
+
     def _build_prompt(
         self,
         question: str,
@@ -44,9 +49,9 @@ class TFTGenerator:
         game_state: Optional[GameState] = None
     ) -> str:
         """프롬프트 구성"""
-        
+
         prompt_parts = []
-        
+
         # 1. 게임 상태 정보
         if game_state:
             state_info = f"""
@@ -63,13 +68,13 @@ class TFTGenerator:
 - 연패: {game_state.lose_streak}회
 """
             prompt_parts.append(state_info)
-        
+
         # 2. 검색된 전략
         prompt_parts.append(f"""
 === 참고할 전략 정보 ===
 {context}
 """)
-        
+
         # 3. 질문
         prompt_parts.append(f"""
 === 사용자 질문 ===
@@ -84,9 +89,9 @@ class TFTGenerator:
 
 만약 전략 정보가 부족하다면 솔직히 말씀해주세요.
 """)
-        
+
         return "\n".join(prompt_parts)
-    
+
     def generate(
         self,
         question: str,
@@ -96,44 +101,49 @@ class TFTGenerator:
         max_tokens: int = 1000
     ) -> str:
         """
-        Claude API로 답변 생성
-        
+        Ollama로 답변 생성
+
         Args:
             question: 사용자 질문
             context: 검색된 전략 컨텍스트
             game_state: 게임 상태 (선택)
             temperature: 생성 온도
             max_tokens: 최대 토큰 수
-            
+
         Returns:
             생성된 답변
         """
         # 프롬프트 구성
         prompt = self._build_prompt(question, context, game_state)
-        
-        print("\n=== Claude API 호출 중 ===")
-        
+
+        print("\n=== Ollama 로컬 LLM 호출 중 ===")
+
         try:
-            # API 호출
-            message = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=max_tokens,
-                temperature=temperature,
-                system=self.SYSTEM_PROMPT,
+            # Ollama API 호출
+            response = ollama.chat(
+                model=self.model_name,
                 messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                options={
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                }
             )
-            
-            response = message.content[0].text
+
             print("=== 답변 생성 완료 ===\n")
-            
-            return response
-            
+
+            return response['message']['content']
+
         except Exception as e:
-            print(f"API 호출 실패: {e}")
-            return f"죄송합니다. 답변 생성 중 오류가 발생했습니다: {str(e)}"
-    
+            error_msg = str(e)
+            print(f"Ollama 호출 실패: {error_msg}")
+            if "connection" in error_msg.lower():
+                return "Ollama가 실행되지 않았습니다. 'ollama serve' 명령으로 실행해주세요."
+            else:
+                return f"죄송합니다. 답변 생성 중 오류가 발생했습니다: {error_msg}"
+
     def generate_with_sources(
         self,
         question: str,
@@ -143,7 +153,7 @@ class TFTGenerator:
     ) -> Dict:
         """
         답변과 함께 출처 정보도 반환
-        
+
         Returns:
             {
                 "answer": "생성된 답변",
@@ -152,7 +162,7 @@ class TFTGenerator:
         """
         # 답변 생성
         answer = self.generate(question, context, game_state)
-        
+
         # 출처 추출
         sources = []
         for result in search_results:
@@ -165,7 +175,7 @@ class TFTGenerator:
             }
             if source not in sources:  # 중복 제거
                 sources.append(source)
-        
+
         return {
             "answer": answer,
             "sources": sources
@@ -174,10 +184,9 @@ class TFTGenerator:
 
 # 사용 예시
 if __name__ == "__main__":
-    # API 키가 설정되어 있다면 테스트
     try:
         generator = TFTGenerator()
-        
+
         # 테스트 컨텍스트
         test_context = """
 [전략 1]
@@ -194,7 +203,7 @@ if __name__ == "__main__":
 - 내용: 연패 중이라면 골드를 모아서 4-1에 한번에 쓰는 게 좋습니다.
         지금은 최소한의 기물만 유지하세요.
 """
-        
+
         # 게임 상태
         game_state = GameState(
             round="3-2",
@@ -209,18 +218,17 @@ if __name__ == "__main__":
             lose_streak=3,
             question="지금 리롤해야 할까요 아니면 골드 모아야 할까요?"
         )
-        
+
         # 답변 생성
         response = generator.generate(
             question=game_state.question,
             context=test_context,
             game_state=game_state
         )
-        
+
         print("\n=== 생성된 답변 ===")
         print(response)
-        
+
     except ValueError as e:
-        print(f"API 키 설정 필요: {e}")
-        print("config.py에서 ANTHROPIC_API_KEY를 설정하거나")
-        print(".env 파일에 ANTHROPIC_API_KEY를 추가하세요.")
+        print(f"오류: {e}")
+        print("Ollama가 설치되어 있고 실행 중인지 확인하세요.")

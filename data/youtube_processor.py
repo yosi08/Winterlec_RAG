@@ -5,7 +5,10 @@ import re
 
 class YouTubeProcessor:
     """유튜브 영상에서 자막 추출 및 정제"""
-    
+
+    def __init__(self):
+        self.api = YouTubeTranscriptApi()
+
     @staticmethod
     def extract_video_id(url: str) -> str:
         """유튜브 URL에서 video ID 추출"""
@@ -14,44 +17,60 @@ class YouTubeProcessor:
             r'(?:embed\/)([0-9A-Za-z_-]{11})',
             r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
-        
+
         raise ValueError(f"유효하지 않은 유튜브 URL: {url}")
-    
-    @staticmethod
-    def get_transcript(video_id: str, language: str = 'ko') -> List[Dict]:
+
+    def get_transcript(self, video_id: str, language: str = 'ko') -> List[Dict]:
         """
-        유튜브 자막 가져오기
-        
+        유튜브 자막 가져오기 (새 API 버전 1.2.x)
+
         Args:
             video_id: 유튜브 영상 ID
             language: 자막 언어 (기본값: 'ko')
-            
+
         Returns:
             자막 리스트 [{"text": "...", "start": 0.0, "duration": 2.5}, ...]
         """
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(
-                video_id, 
-                languages=[language]
-            )
-            return transcript
+            # 사용 가능한 자막 목록 확인
+            transcript_list = self.api.list(video_id)
+
+            # 한국어 자막 우선 시도
+            for transcript in transcript_list:
+                if transcript.language_code == language:
+                    print(f"{transcript.language} 자막 추출 중...")
+                    result = transcript.fetch()
+                    print(f"{transcript.language} 자막 추출 성공")
+                    return [{"text": item.text, "start": item.start, "duration": item.duration} for item in result]
+
+            # 한국어가 없으면 영어 시도
+            for transcript in transcript_list:
+                if transcript.language_code == 'en':
+                    print(f"{transcript.language} 자막 추출 중...")
+                    result = transcript.fetch()
+                    print(f"{transcript.language} 자막 추출 성공 (번역 권장)")
+                    return [{"text": item.text, "start": item.start, "duration": item.duration} for item in result]
+
+            # 아무 자막이나 가져오기
+            for transcript in transcript_list:
+                try:
+                    print(f"{transcript.language} 자막 추출 중...")
+                    result = transcript.fetch()
+                    print(f"{transcript.language} 자막 추출 성공")
+                    return [{"text": item.text, "start": item.start, "duration": item.duration} for item in result]
+                except Exception:
+                    continue
+
+            raise Exception("사용 가능한 자막이 없습니다.")
+
         except Exception as e:
-            print(f"자막 추출 실패: {e}")
-            # 자동 생성 자막 시도
-            try:
-                transcript = YouTubeTranscriptApi.get_transcript(
-                    video_id,
-                    languages=[f'{language}-auto']
-                )
-                return transcript
-            except Exception as e2:
-                raise Exception(f"자막을 가져올 수 없습니다: {e2}")
-    
+            raise Exception(f"자막을 가져올 수 없습니다. 영상에 자막이 없거나 비공개 영상일 수 있습니다. 상세: {e}")
+
     @staticmethod
     def clean_text(text: str) -> str:
         """
@@ -72,32 +91,32 @@ class YouTubeProcessor:
             r'ㅋ+',
             r'ㅎ+',
         ]
-        
+
         cleaned = text
         for pattern in noise_patterns:
             cleaned = re.sub(pattern, '', cleaned)
-        
+
         # 중복 공백 제거
         cleaned = re.sub(r'\s+', ' ', cleaned)
-        
+
         return cleaned.strip()
-    
+
     @staticmethod
     def merge_transcript(transcript: List[Dict], time_threshold: float = 10.0) -> str:
         """
         자막을 시간 기준으로 병합
-        
+
         Args:
             transcript: 자막 리스트
             time_threshold: 병합 기준 시간 (초)
         """
         if not transcript:
             return ""
-        
+
         merged_text = []
         current_segment = []
         last_time = transcript[0]['start']
-        
+
         for item in transcript:
             # 시간 차이가 크면 새 세그먼트 시작
             if item['start'] - last_time > time_threshold:
@@ -106,50 +125,50 @@ class YouTubeProcessor:
                 current_segment = [item['text']]
             else:
                 current_segment.append(item['text'])
-            
+
             last_time = item['start']
-        
+
         # 마지막 세그먼트 추가
         if current_segment:
             merged_text.append(' '.join(current_segment))
-        
+
         return '\n\n'.join(merged_text)
-    
+
     def process_video(self, video_url: str) -> str:
         """
         유튜브 영상 전체 처리 파이프라인
-        
+
         Args:
             video_url: 유튜브 URL
-            
+
         Returns:
             정제된 텍스트
         """
         # 1. Video ID 추출
         video_id = self.extract_video_id(video_url)
         print(f"Video ID: {video_id}")
-        
+
         # 2. 자막 가져오기
         transcript = self.get_transcript(video_id)
         print(f"자막 {len(transcript)}개 추출 완료")
-        
+
         # 3. 자막 병합
         merged_text = self.merge_transcript(transcript)
-        
+
         # 4. 텍스트 정제
         cleaned_text = self.clean_text(merged_text)
         print(f"정제 완료: {len(cleaned_text)} 글자")
-        
+
         return cleaned_text
 
 
 # 사용 예시
 if __name__ == "__main__":
     processor = YouTubeProcessor()
-    
+
     # 테스트 URL (실제 롤체 영상으로 교체)
     test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    
+
     try:
         result = processor.process_video(test_url)
         print("\n=== 처리 결과 (처음 500자) ===")

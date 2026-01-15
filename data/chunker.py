@@ -1,4 +1,4 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import List, Dict
 import re
 from data.metadata_schema import StrategyMetadata
@@ -47,8 +47,6 @@ class TFTChunker:
     
     def detect_strategy_type(self, text: str) -> str:
         """텍스트에서 전략 유형 자동 감지"""
-        text_lower = text.lower()
-        
         if '리롤' in text or '돌림' in text:
             return '리롤'
         elif '레벨' in text:
@@ -91,14 +89,17 @@ class TFTChunker:
         # 실제로는 롤체 챔피언 목록을 가지고 매칭해야 함
         common_champions = [
             '야스오', '요네', '제드', '아리', '세트', '케넨',
-            '볼리베어', '오공', '리산드라', '아지르', '킨드레드'
+            '볼리베어', '오공', '리산드라', '아지르', '킨드레드',
+            '진', '베인', '아펠리오스', '트위치', '카이사',
+            '나미', '소라카', '잔나', '럭스', '모르가나'
         ]
-        
+
         found = []
         for champ in common_champions:
             if champ in text:
-                found.append(champ)
-        
+                if champ not in found:  # 중복 방지
+                    found.append(champ)
+
         return found
     
     def create_chunks_with_metadata(
@@ -124,10 +125,13 @@ class TFTChunker:
             # 2. 각 청크에 대해 메타데이터 생성
             chunk_metadata = base_metadata.copy()
             
-            # 자동 감지
-            chunk_metadata['strategy_type'] = self.detect_strategy_type(chunk)
-            chunk_metadata['game_stage'] = self.detect_game_stage(chunk)
-            chunk_metadata['key_champions'] = self.extract_champions(chunk)
+            # 자동 감지 (메타데이터에 없는 경우에만)
+            if 'strategy_type' not in chunk_metadata or not chunk_metadata['strategy_type']:
+                chunk_metadata['strategy_type'] = self.detect_strategy_type(chunk)
+            if 'game_stage' not in chunk_metadata or not chunk_metadata['game_stage']:
+                chunk_metadata['game_stage'] = self.detect_game_stage(chunk)
+            if 'key_champions' not in chunk_metadata or not chunk_metadata['key_champions']:
+                chunk_metadata['key_champions'] = self.extract_champions(chunk)
             
             result.append({
                 'id': f"{base_metadata.get('video_source', 'unknown')}_{i}",
