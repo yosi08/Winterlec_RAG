@@ -1,0 +1,11 @@
+{
+  "season": "시즌13",
+  "patch": "13.24",
+  "composition_name": "6도전자",
+  "key_champions": ["야스오", "요네", "제드", "아지르"],
+  "synergies": ["도전자", "결투가"],
+  "core_items": ["무한의 대검", "최후의 속삭임", "거인 학살자"],
+  "difficulty": "초보",
+  "video_source": "유튜버명_abc123",
+  "prerequisites": "야스오 또는 요네 2개 이상"
+}

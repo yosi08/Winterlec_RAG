@@ -1,0 +1,20 @@
+# Core
+anthropic==0.39.0
+python-dotenv==1.0.0
+
+# Vector Store & Embeddings
+chromadb==0.4.22
+sentence-transformers==2.3.1
+
+# Text Processing
+langchain==0.1.6
+langchain-community==0.0.20
+youtube-transcript-api==0.6.2
+
+# Utils
+pydantic==2.5.3
+tqdm==4.66.1
+pandas==2.1.4
+
+# Optional (for advanced features)
+rank-bm25==0.2.2
